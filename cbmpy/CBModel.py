@@ -2013,6 +2013,7 @@ class Model(Fbase):
             self.getReaction(rid) is not None
         ), '\nERROR: \"{}\" is not a valid reaction id'.format(rid)
         for gpr_ in self.gpr:
+            #print(gpr_)
             if gpr_.getProtein() == rid:
                 out = gpr_
                 break

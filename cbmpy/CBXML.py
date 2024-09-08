@@ -38,6 +38,7 @@ from __future__ import absolute_import
 
 import os, time, numpy, re
 import ast, shutil
+from pyeda.inter import exprvar as Exprvar
 
 try:
     from cgi import escape as ESCAPE
@@ -1781,6 +1782,89 @@ class FBCconnect(object):
                     print('INFO: creating a type', fo_[3], 'fluxobjective')
                     FO.setVariableType(FBC3_VARIABLE_TYPES[fo_[3]])
         return O
+        
+        
+    def createGeneAssociationV2(self, rid, assoc, gprid=None):
+        """
+        Create a gene association for a specified reaction and an association string
+        Ensures DNF logical form
+
+
+         - *rid* a reaction id
+         - *assoc* the association string e.g.(b0698 and b0697) or (b0696)
+
+
+        """
+        fbcrxn = self.model.getReaction(rid.id).getPlugin('fbc')
+        gpr_assoc = fbcrxn.getGeneProductAssociation()
+        #print(rid, fbcrxn)
+        
+        assert(assoc)
+            
+        if gpr_assoc:
+            #print(gpr_assoc)
+            fbcrxn.unsetGeneProductAssociation()     
+        
+        gpr_assoc = fbcrxn.createGeneProductAssociation()
+        gpr = Exprvar(str(assoc))
+        gpr = gpr.to_dnf()
+        
+        if gpr.depth > 1:
+            gpr_assoc = gpr_assoc.createOr()
+            gpr = gpr.xs
+        else:
+            gpr = [gpr]
+
+        for subitem in gpr:
+            #print(subitem)
+            if subitem.depth > 0:
+                if subitem.NAME == 'Or':
+                    protein_assoc = gpr_assoc.createOr()
+                else:
+                    protein_assoc = gpr_assoc.createAnd()
+                subitem = subitem.xs
+            else:
+                protein_assoc = gpr_assoc
+                subitem = [subitem]
+
+            for gene in subitem:
+                gene_ref = protein_assoc.createGeneProductRef()
+                #gene_product = gene_products.getElementBySId(str(gene))
+                gene_ref.setGeneProduct(str(gene))
+                
+        print(gpr)
+        return gpr
+                    
+        """            
+        GPR = self.fbc.createGeneAssociation()
+        if gprid == None:
+            # try this: get rid of invalid symbols in GPRid
+
+            GPR.setId('{}_gpra'.format(rid.id))
+
+        else:
+            GPR.setId(gprid)
+
+        GA = GPR.createAssociation()
+        ass = GA.parseInfixAssociation(assoc)
+        if ass == None:
+            ret0 = -1
+        else:
+            ret1 = GPR.setAssociation(ass)
+            ret2 = GPR.setReaction(str(rid.id))
+            if ret1 == 0 and ret2 == 0:
+                ret0 = 0
+            else:
+                ret0 = -1
+        if ret0 != 0:
+            print(
+                'WARNING: Incompatible gene label: \"{}\".({}) only dots and underscores are currently allowed in gene labels'.format(
+                    rid, assoc
+                )
+            )
+        else:
+            return GPR
+        """
 
 
     def createGeneAssociationV1(self, rid, assoc, gprid=None):
@@ -1795,7 +1879,7 @@ class FBCconnect(object):
         if gprid == None:
             # try this: get rid of invalid symbols in GPRid
 
-            GPR.setId('{}_gpra'.format(rid))
+            GPR.setId('{}_gpra'.format(rid.id))
 
         else:
             GPR.setId(gprid)
@@ -1806,7 +1890,7 @@ class FBCconnect(object):
             ret0 = -1
         else:
             ret1 = GPR.setAssociation(ass)
-            ret2 = GPR.setReaction(rid)
+            ret2 = GPR.setReaction(rid.id)
             if ret1 == 0 and ret2 == 0:
                 ret0 = 0
             else:
@@ -2045,7 +2129,7 @@ class CBMtoSBML3(FBCconnect):
             qoterms = []
             for qob in quad_flux_objs:
                 qoterms.append('{}*{}*{}'.format(qob[2], qob[0], qob[1]))
-            ob_.setAnnotation('quadratic_objective', ','.join(qoterms))
+            #ob_.setAnnotation('quadratic_objective', ','.join(qoterms))
             print(ob_.annotation)
 
 
@@ -2102,6 +2186,32 @@ class CBMtoSBML3(FBCconnect):
             if g.miriam != None:
                 # last blah blah
                 sbml_setCVterms(G, g.miriam.getAllMIRIAMUris(), model=False)
+                
+                
+    def addGPRV2(self,
+        parse_from_annotation=False,
+        annotation_key='GENE ASSOCIATION',
+        add_cbmpy_anno=True):
+                
+        for g_ in self.fba.gpr:
+            rid = g_.getProtein()
+            assoc = g_.getAssociationStr(use_labels=True)
+            if rid != None and rid != '':
+                if assoc != None and assoc != '':
+                    GPR = self.createGeneAssociationV2(rid, assoc, gprid=g_.getId())
+                    gprnotes = ''
+                    for ge_ in g_.getGeneIds():
+                        notes = self.fba.getGene(ge_).getNotes()
+                        if notes != '':
+                            gprnotes += '{}\n'.format(notes)
+                    if gprnotes != '':
+                        sbml_setNotes3(GPR, gprnotes)
+            else:
+                print(
+                    'WARNING: Skipping GPR association: \"{}\"\n\"{}\"--> \"{}\"'.format(
+                        g_.getId(), rid, assoc
+                    )
+                )
 
     def addGeneProteinAssociationsV1(
         self,
@@ -3075,6 +3185,11 @@ def sbml_writeSBML3FBC(
     )
     sbml_setParametersL3Fbc(cs3, add_cbmpy_anno=add_cbmpy_annot, fbc_version=fbc_version)
 
+    if fbc_version >= 2:    
+        cs3.addGPRV2(
+            parse_from_annotation=gpr_from_annot,
+            annotation_key='GENE_ASSOCIATION',
+            add_cbmpy_anno=add_cbmpy_annot)
 
     # User defined constraints try and keep backwards compatability with FBCv2 hack and FBCv3
     if fba.user_constraints is not None and len(fba.user_constraints) >= 1:

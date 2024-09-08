@@ -17,6 +17,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 Author: Brett G. Olivier (@bgoli)
 
+## Fork by Maxime Mahout
+
+This fork proposes an implementation of the encoding of gene protein reaction associations into the SBML FBC V2 format. Indeed, until now there was no way of adding gene products to the model and having them appear in the SBML FBC V2.
+
+The code uses Python library `pyeda` for formatting the logical relations into the standardized DNF form (Disjunctive Normal Form, resulting in a list of isofunctional enzymatic complexes for each reaction).
+
+Other works of interest that might be done in this fork: - implementing the global variable `METAPREFIX = 'meta_'` into a parameter of the conversion functions to SBML. The automatically added `'meta_'` prefix is incompatible with some versions of cobrapy, and was removed for the analysis of <https://github.com/maxm4/paSAmcs>. Code needs more testing before pull request.
+
 ## About
 CBMPy (https://systemsbioinformatics.github.io/cbmpy/) is a new platform for constraint
 based modelling and analysis. It has been designed using principles developed
